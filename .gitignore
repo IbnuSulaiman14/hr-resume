@@ -1,0 +1,13 @@
+# Rahasia
+.env
+.streamlit/secrets.toml
+
+# Lingkungan dan cache
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Data mentah (besar, dataset publik Kaggle). resumes_meta.csv tetap di-commit.
+data/Resume.csv
