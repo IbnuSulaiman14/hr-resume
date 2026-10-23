@@ -12,4 +12,5 @@ def collection_name() -> str:
 
 @lru_cache(maxsize=1)
 def get_qdrant_client() -> QdrantClient:
-    return QdrantClient(url=require_setting("QDRANT_URL"), api_key=require_setting("QDRANT_API_KEY"), timeout=30)
+    # Timeout longgar: upsert batch ke cluster gratis kadang lebih dari 30 detik
+    return QdrantClient(url=require_setting("QDRANT_URL"), api_key=require_setting("QDRANT_API_KEY"), timeout=90)
