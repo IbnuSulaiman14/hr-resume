@@ -24,10 +24,11 @@ def add_sources(items: list[dict[str, Any]]) -> None:
         current.extend(items)
 
 
-def add_tool_call(name: str, args: dict[str, Any]) -> None:
+def add_tool_call(name: str, args: dict[str, Any], agent: str | None = None) -> None:
+    """Catat satu pemanggilan tool. `agent` adalah agent pemanggilnya (supervisor, matcher, analyst)."""
     current = _tool_calls.get()
     if current is not None:
-        current.append({"name": name, "args": args})
+        current.append({"name": name, "args": args, "agent": agent})
 
 
 def get_sources() -> list[dict[str, Any]]:
