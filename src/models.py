@@ -8,16 +8,24 @@ def _base_url() -> str:
     return get_setting("OPENROUTER_BASE_URL") or DEFAULT_OPENROUTER_BASE_URL
 
 
+def chat_model_name() -> str:
+    return require_setting("CHAT_MODEL")
+
+
 def get_chat_model(model: str | None = None, temperature: float = 0.0) -> ChatOpenAI:
-    # temperature 0 supaya rute dan pemanggilan tool stabil antar percobaan
+    # temperature 0 supaya rute dan pemanggilan tool stabil antar percobaan.
+    # Reasoning dimatikan lewat parameter OpenRouter: pada uji B3, DeepSeek tanpa reasoning tetap memanggil
+    # tool dengan benar, tetapi sekitar 3 kali lebih cepat dan tidak memecah pencarian menjadi dua.
     return ChatOpenAI(
-        model=model or require_setting("CHAT_MODEL"),
+        model=model or chat_model_name(),
         api_key=require_setting("OPENROUTER_API_KEY"),
         base_url=_base_url(),
         temperature=temperature,
         timeout=60,
         max_retries=2,
         stream_usage=True,
+        # provider sort throughput: OpenRouter memilih penyedia dengan keluaran token tercepat
+        extra_body={"reasoning": {"enabled": False}, "provider": {"sort": "throughput"}},
     )
 
 
