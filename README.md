@@ -25,24 +25,44 @@ Rekruter menerima banyak CV dengan format berbeda-beda. Pencarian kata kunci mel
 
 ## Arsitektur
 
+Aplikasi punya dua alur: ingest yang dijalankan sekali untuk mengisi Qdrant, dan chat yang berjalan pada setiap pertanyaan.
+
+### Alur ingest (sekali jalan)
+
 ```mermaid
-flowchart LR
-    U[Pengguna] --> ST[Streamlit app.py]
-    ST -->|pertanyaan + 6 giliran terakhir| SUP[Supervisor]
-    SUP -->|tool: matcher| MAT[Matcher - agent ReAct]
-    SUP -->|tool: analyst| ANA[Analyst - agent ReAct]
-    MAT --> T1[search_resumes / match_job / get_resume / compare_candidates / skill_gap / candidate_timeline]
-    ANA --> T2[category_distribution / filter_candidates / skill_frequency]
-    T1 --> Q[(Qdrant Cloud - 14.439 chunk)]
-    T1 --> RR[Reranker qwen3-reranker-8b]
-    T1 --> M[(resumes_meta.csv)]
+flowchart TD
+    CSV["data/Resume.csv<br/>2.484 CV"] --> P["Parse HTML per seksi"]
+    P --> MD["Metadata: perkiraan tahun pengalaman,<br/>level pendidikan, jabatan, skill, timeline"]
+    P --> CH["Chunk per seksi<br/>500 token, overlap 50<br/>awalan [KATEGORI] [seksi]"]
+    CH --> EM["Embedding<br/>openai/text-embedding-3-small<br/>lewat OpenRouter"]
+    EM --> Q[("Qdrant Cloud<br/>14.439 chunk, cosine, ID uuid5")]
+    MD --> M[("data/resumes_meta.csv")]
+```
+
+**Ingest** (`python -m src.ingest.build_index`): `Resume.csv` -> parse HTML per seksi -> metadata (perkiraan tahun pengalaman, level pendidikan, jabatan, skill) -> chunk per seksi (500 token, overlap 50, awalan `[KATEGORI] [seksi]`) -> embedding `openai/text-embedding-3-small` lewat OpenRouter -> Qdrant (cosine, ID uuid5, idempoten) + `data/resumes_meta.csv`.
+
+### Alur chat (tiap pertanyaan)
+
+```mermaid
+flowchart TD
+    U[Pengguna] --> ST["Streamlit (app.py)"]
+    ST -->|"pertanyaan + 6 giliran terakhir"| SUP[Supervisor]
+    SUP -->|"tool: matcher"| MAT["Matcher (agent ReAct)"]
+    SUP -->|"tool: analyst"| ANA["Analyst (agent ReAct)"]
+    MAT --> T1["6 tool RAG: search_resumes, match_job, get_resume,<br/>compare_candidates, skill_gap, candidate_timeline"]
+    ANA --> T2["3 tool Pandas: category_distribution,<br/>filter_candidates, skill_frequency"]
+    T1 -->|"embed pertanyaan, cari"| Q[("Qdrant Cloud")]
+    T1 -->|"urutkan ulang"| RR["Reranker<br/>qwen3-reranker-8b"]
+    T1 --> M[("resumes_meta.csv")]
     T2 --> M
+    T1 -.->|"sumber dan tool call"| CTX["Penampung per permintaan"]
+    T2 -.->|"sumber, tool call, grafik"| CTX
+    SUP -->|"jawaban"| ST
+    CTX -.->|"bukti jawaban"| ST
     SUP -.-|"prompt, trace, token"| LF[Langfuse]
     MAT -.- LF
     ANA -.- LF
 ```
-
-**Ingest** (`python -m src.ingest.build_index`): `Resume.csv` -> parse HTML per seksi -> metadata (perkiraan tahun pengalaman, level pendidikan, jabatan, skill) -> chunk per seksi (500 token, overlap 50, awalan `[KATEGORI] [seksi]`) -> embedding `openai/text-embedding-3-small` lewat OpenRouter -> Qdrant (cosine, ID uuid5, idempoten) + `data/resumes_meta.csv`.
 
 **Chat** (tiap pertanyaan): Streamlit -> Supervisor memilih spesialis -> Matcher (RAG di Qdrant + reranker) dan/atau Analyst (Pandas) menjalankan loop ReAct -> tool mencatat sumber ke penampung per permintaan -> UI menampilkan jawaban beserta buktinya.
 
