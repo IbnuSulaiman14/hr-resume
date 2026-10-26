@@ -37,9 +37,9 @@ flowchart LR
     T1 --> RR[Reranker qwen3-reranker-8b]
     T1 --> M[(resumes_meta.csv)]
     T2 --> M
-    SUP -. prompt, trace, token .- LF[Langfuse]
-    MAT -. .- LF
-    ANA -. .- LF
+    SUP -.-|"prompt, trace, token"| LF[Langfuse]
+    MAT -.- LF
+    ANA -.- LF
 ```
 
 **Ingest** (`python -m src.ingest.build_index`): `Resume.csv` -> parse HTML per seksi -> metadata (perkiraan tahun pengalaman, level pendidikan, jabatan, skill) -> chunk per seksi (500 token, overlap 50, awalan `[KATEGORI] [seksi]`) -> embedding `openai/text-embedding-3-small` lewat OpenRouter -> Qdrant (cosine, ID uuid5, idempoten) + `data/resumes_meta.csv`.
