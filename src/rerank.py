@@ -13,10 +13,10 @@ import httpx
 from src.config import DEFAULT_OPENROUTER_BASE_URL, get_setting, require_setting
 from src.tools import context
 
-# Satu-satunya model reranker OpenRouter yang lolos pengaturan Zero Data Retention akun ini (diuji B6.4)
+# Satu-satunya model reranker OpenRouter yang lolos pengaturan Zero Data Retention akun ini
 DEFAULT_RERANK_MODEL = "qwen/qwen3-reranker-8b"
 DOCUMENT_CHARS = 2000
-# Satu kali coba ulang: kegagalan sesaat penyedia sempat terlihat saat uji B6.4
+# Satu kali coba ulang: kegagalan sesaat penyedia sempat terlihat saat pengujian
 ATTEMPTS = 2
 
 

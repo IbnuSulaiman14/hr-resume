@@ -1,4 +1,4 @@
-"""Gerbang G1: python -m eval.g1_sample [--n 40]
+"""Pemeriksaan hasil parsing: python -m eval.g1_sample [--n 40]
 
 Menulis eval/g1_sample.md berisi CV acak berdampingan: teks asli (dipotong), seksi terparse,
 tanggal kerja, perkiraan tahun pengalaman, gelar, dan level pendidikan. Dipakai untuk pemeriksaan manual.
@@ -14,7 +14,7 @@ OUTPUT = ROOT / "eval" / "g1_sample.md"
 
 def main(n: int = 40, seed: int = 7) -> None:
     df = load_resumes().sample(n=n, random_state=seed)
-    lines = ["# Sampel G1", "", f"{n} CV acak (seed {seed}).", ""]
+    lines = ["# Sampel pemeriksaan parsing", "", f"{n} CV acak (seed {seed}).", ""]
     for row in df.itertuples():
         parsed = parse_resume(row.ID, row.Category, row.Resume_html, row.Resume_str)
         years = estimate_years_experience(parsed.job_dates, today=reference_date(parsed.job_dates, row.Resume_str))

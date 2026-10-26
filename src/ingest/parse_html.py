@@ -1,4 +1,4 @@
-"""Parse kolom Resume_html menjadi seksi dan metadata. Tahap B1.1 sampai B1.3.
+"""Parse kolom Resume_html menjadi seksi dan metadata.
 
 Fungsi di sini murni (tanpa jaringan) supaya mudah diuji.
 """
@@ -158,7 +158,7 @@ _MONTHS = {m: i for i, m in enumerate(
 _SEASONS = {"spring": 3, "summer": 6, "fall": 9, "autumn": 9, "winter": 12}
 _CURRENT = {"current", "present", "now", "today", "till date", "to date", "ongoing"}
 
-# Tanggal terbaru yang masuk akal di dataset (lihat docs/PENJELASAN.md, B1).
+# Tanggal terbaru yang masuk akal di dataset.
 DATA_SNAPSHOT = date(2021, 12, 1)
 MIN_YEAR = 1950
 
@@ -215,7 +215,7 @@ def reference_date(job_dates: list[tuple[str, str]], text: str = "") -> date | N
     CV paling cepat ditulis pada tanggal terbaru yang disebut di dalamnya (tanggal kerja atau tahun
     mana pun di teks, misalnya "Exchange 2013" atau tahun lulus). Ditambah 12 bulan karena CV biasanya
     diperbarui setelah peristiwa terakhirnya, dan dibatasi DATA_SNAPSHOT. Aturan ini dipilih setelah
-    dibandingkan dengan kalimat "N+ years" di ringkasan CV (lihat docs/PENJELASAN.md, B1)."""
+    dibandingkan dengan kalimat "N+ years" di ringkasan CV."""
     candidates = []
     for start, end in job_dates:
         for parsed in (parse_date(start), parse_date(end)):

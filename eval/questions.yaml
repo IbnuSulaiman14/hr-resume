@@ -1,8 +1,8 @@
-# Set evaluasi: 20 pertanyaan PRD bagian 9 + 2 pertanyaan tool Tahap 3. Dijalankan oleh eval/run_eval.py.
+# Set evaluasi: 20 pertanyaan inti + 2 pertanyaan untuk tool skill gap dan timeline. Dijalankan oleh eval/run_eval.py.
 # route: agent yang seharusnya dipakai (matcher | analyst | both | none).
 # tools: tool yang seharusnya dipanggil (urutan tidak dinilai).
 # turns: pertanyaan sebelumnya dalam percakapan yang sama (untuk uji riwayat).
-# truth: kebenaran dasar dari data/resumes_meta.csv (B5.1). must_contain: semua harus muncul di jawaban;
+# truth: kebenaran dasar dari data/resumes_meta.csv. must_contain: semua harus muncul di jawaban;
 #        any_of: minimal satu muncul. Angka diperiksa ulang oleh tests/test_eval_truth.py.
 # expect: pemeriksaan manual atau otomatis tambahan.
 

@@ -1,4 +1,4 @@
-"""Memecah CV menjadi chunk per seksi. Tahap B1.4."""
+"""Memecah CV menjadi chunk per seksi."""
 from dataclasses import dataclass
 from functools import lru_cache
 

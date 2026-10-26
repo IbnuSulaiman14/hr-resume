@@ -1,4 +1,4 @@
-"""Penghitung token semua panggilan LLM dalam satu permintaan (supervisor + sub-agent). Tahap B3.4.
+"""Penghitung token semua panggilan LLM dalam satu permintaan (supervisor + sub-agent).
 
 Dipasang sebagai callback LangChain. Callback ikut turun ke sub-agent karena config diteruskan,
 jadi satu tracker menjumlahkan token dari setiap panggilan model dalam satu pertanyaan.

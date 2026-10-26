@@ -1,4 +1,4 @@
-"""Tool Analyst (Pandas atas data/resumes_meta.csv). Tahap B2.5 dan B2.6.
+"""Tool Analyst (Pandas atas data/resumes_meta.csv).
 
 Angka dihitung di sini, bukan oleh LLM. Fungsi biasa (tanpa @tool) bisa diuji langsung;
 pembungkus @tool untuk agent ada di bagian bawah.

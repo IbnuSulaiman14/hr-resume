@@ -1,4 +1,4 @@
-"""Jalankan: python -m eval.run_eval [--only id1,id2]. Tahap B5.2.
+"""Jalankan: python -m eval.run_eval [--only id1,id2].
 
 Membaca eval/questions.yaml, menjalankan tiap pertanyaan lewat supervisor, lalu menghitung:
 ketepatan rute, keterlacakan (ID di jawaban ada di sumber), penolakan benar, dan kesamaan angka

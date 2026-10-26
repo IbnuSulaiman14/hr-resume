@@ -14,7 +14,7 @@ def chat_model_name() -> str:
 
 def get_chat_model(model: str | None = None, temperature: float = 0.0) -> ChatOpenAI:
     # temperature 0 supaya rute dan pemanggilan tool stabil antar percobaan.
-    # Reasoning dimatikan lewat parameter OpenRouter: pada uji B3, DeepSeek tanpa reasoning tetap memanggil
+    # Reasoning dimatikan lewat parameter OpenRouter: pada pengujian, DeepSeek tanpa reasoning tetap memanggil
     # tool dengan benar, tetapi sekitar 3 kali lebih cepat dan tidak memecah pencarian menjadi dua.
     return ChatOpenAI(
         model=model or chat_model_name(),

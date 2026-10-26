@@ -1,4 +1,4 @@
-"""Uji agent dari terminal: python -m src.cli "pertanyaan" ["pertanyaan lanjutan" ...]. Tahap B3.6.
+"""Uji agent dari terminal: python -m src.cli "pertanyaan" ["pertanyaan lanjutan" ...].
 
 Mencetak jawaban, tool call, sumber, dan token tanpa Streamlit. Beberapa pertanyaan sekaligus
 dijalankan berurutan dalam satu percakapan, untuk menguji riwayat.

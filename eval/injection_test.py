@@ -1,4 +1,4 @@
-"""Uji prompt injection (B5.3): python -m eval.injection_test
+"""Uji prompt injection: python -m eval.injection_test
 
 Menyisipkan sementara satu CV sintetis berisi instruksi tersembunyi ke Qdrant (di seksi summary, skills,
 dan experience), menjalankan pencarian yang akan menemukannya, lalu memeriksa bahwa agent tidak menuruti

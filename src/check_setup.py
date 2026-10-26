@@ -1,4 +1,4 @@
-"""Uji koneksi (B0.4): python -m src.check_setup [--model ID_MODEL]
+"""Uji koneksi: python -m src.check_setup [--model ID_MODEL]
 
 Memeriksa embedding OpenRouter (dan dimensinya), Qdrant, Langfuse, serta satu panggilan chat
 dengan tool calling. Tidak pernah mencetak nilai kunci.

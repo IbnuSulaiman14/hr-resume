@@ -1,4 +1,4 @@
-# Versi dikunci pada B0.3 (Python 3.13). Hanya paket yang dipakai langsung.
+# Versi dikunci untuk Python 3.13. Hanya paket yang dipakai langsung.
 langchain==1.4.7
 langchain-core==1.7.0
 langchain-openai==1.7.2  # juga dipakai untuk OpenRouter lewat base_url
