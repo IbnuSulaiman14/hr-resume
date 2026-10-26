@@ -1,35 +1,33 @@
-"""Supervisor: agent LangGraph yang memanggil Matcher dan Analyst sebagai tool. Tahap B3.3.
+"""Supervisor: agent LangGraph yang memanggil Matcher dan Analyst sebagai tool.
 
-Prompt: prompts.get_prompt("supervisor-system"). Riwayat dikirim dari luar (dipotong ke
-config.HISTORY_TURNS giliran); graf tidak menyimpan state.
+System prompt "supervisor-system" diambil dari Langfuse setiap kali model dipanggil (src/prompts.py).
+Riwayat dikirim dari luar (dipotong ke config.HISTORY_TURNS giliran); graf tidak menyimpan state.
 """
 from langchain.agents import create_agent
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
 
+from src.agents.analyst import PROMPT_NAME as ANALYST_PROMPT
 from src.agents.analyst import build_analyst
+from src.agents.matcher import PROMPT_NAME as MATCHER_PROMPT
 from src.agents.matcher import build_matcher
 from src.models import get_chat_model
-from src.prompts import Prompt, get_prompt
+from src.prompts import get_prompt, langfuse_system_prompt, prompt_metadata
 from src.tools import context
 
+PROMPT_NAME = "supervisor-system"
 # Batas langkah graf sub-agent supaya loop tool yang tidak selesai berhenti dengan galat, bukan berputar terus
 SUB_AGENT_RECURSION_LIMIT = 16
 
 
-def prompt_metadata(prompt: Prompt) -> dict:
-    """Metadata yang membuat Langfuse menautkan panggilan LLM di dalam graf ke versi prompt-nya."""
-    return {"langfuse_prompt": prompt.client} if prompt.client else {}
-
-
-def _run_sub_agent(agent, prompt: Prompt, name: str, task: str, config: RunnableConfig) -> str:
+def _run_sub_agent(agent, prompt_name: str, name: str, task: str, config: RunnableConfig) -> str:
     context.add_tool_call(name, {"task": task}, agent="supervisor")
     # Config induk diteruskan supaya callback (token, Langfuse) ikut merekam panggilan di dalam sub-agent.
     # Metadata prompt supervisor yang diwarisi diganti dengan prompt sub-agent ini.
     sub_config = {
         **config,
-        "metadata": {**(config.get("metadata") or {}), **prompt_metadata(prompt)},
+        "metadata": {**(config.get("metadata") or {}), **prompt_metadata(get_prompt(prompt_name))},
         "recursion_limit": SUB_AGENT_RECURSION_LIMIT,
     }
     result = agent.invoke({"messages": [HumanMessage(task)]}, config=sub_config)
@@ -38,22 +36,20 @@ def _run_sub_agent(agent, prompt: Prompt, name: str, task: str, config: Runnable
 
 
 def build_supervisor():
-    """Kembalikan graf supervisor dan prompt-nya (untuk metadata trace)."""
-    matcher_prompt = get_prompt("matcher-system")
-    analyst_prompt = get_prompt("analyst-system")
-    matcher = build_matcher(matcher_prompt)
-    analyst = build_analyst(analyst_prompt)
+    matcher = build_matcher()
+    analyst = build_analyst()
 
     @tool("matcher")
     def matcher_tool(task: str, config: RunnableConfig) -> str:
-        """Spesialis pencarian CV (RAG di Qdrant): cari kandidat berdasarkan makna, cocokkan CV dengan
-        deskripsi lowongan, ambil CV utuh dari ID, atau bandingkan 2 sampai 3 CV.
+        """Spesialis CV berbasis RAG di Qdrant: cari kandidat berdasarkan makna, cocokkan CV dengan deskripsi
+        lowongan, ambil CV utuh dari ID, bandingkan 2 sampai 3 CV, cek skill yang dimiliki atau belum dimiliki
+        satu kandidat (skill gap), dan susun riwayat kerja kronologis satu kandidat (timeline).
 
         Args:
             task: instruksi lengkap dan mandiri untuk spesialis. Sertakan kriteria pencarian, teks lowongan,
-                dan ID CV dari percakapan bila ada, karena spesialis tidak melihat riwayat percakapan.
+                daftar skill, dan ID CV dari percakapan bila ada, karena spesialis tidak melihat riwayat percakapan.
         """
-        return _run_sub_agent(matcher, matcher_prompt, "matcher", task, config)
+        return _run_sub_agent(matcher, MATCHER_PROMPT, "matcher", task, config)
 
     @tool("analyst")
     def analyst_tool(task: str, config: RunnableConfig) -> str:
@@ -63,13 +59,14 @@ def build_supervisor():
         Args:
             task: pertanyaan lengkap dan mandiri untuk spesialis, termasuk kategori dan batas angka yang diminta.
         """
-        return _run_sub_agent(analyst, analyst_prompt, "analyst", task, config)
+        return _run_sub_agent(analyst, ANALYST_PROMPT, "analyst", task, config)
 
-    prompt = get_prompt("supervisor-system")
-    graph = create_agent(
-        model=get_chat_model(), tools=[matcher_tool, analyst_tool], system_prompt=prompt.text, name="supervisor"
+    return create_agent(
+        model=get_chat_model(),
+        tools=[matcher_tool, analyst_tool],
+        middleware=[langfuse_system_prompt(PROMPT_NAME)],
+        name="supervisor",
     )
-    return graph, prompt
 
 
 def trim_history(messages: list, turns: int) -> list:

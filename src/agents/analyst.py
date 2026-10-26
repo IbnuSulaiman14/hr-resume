@@ -1,14 +1,20 @@
-"""Sub-agent Analyst: agent ReAct (LangGraph) dengan tool Pandas. Tahap B3.2.
+"""Sub-agent Analyst: agent ReAct (LangGraph) dengan tool Pandas.
 
-Prompt: prompts.get_prompt("analyst-system").
+System prompt "analyst-system" diambil dari Langfuse setiap kali model dipanggil (src/prompts.py).
 """
 from langchain.agents import create_agent
 
 from src.models import get_chat_model
-from src.prompts import Prompt, get_prompt
+from src.prompts import langfuse_system_prompt
 from src.tools.analyst_tools import ANALYST_TOOLS
 
+PROMPT_NAME = "analyst-system"
 
-def build_analyst(prompt: Prompt | None = None):
-    prompt = prompt or get_prompt("analyst-system")
-    return create_agent(model=get_chat_model(), tools=ANALYST_TOOLS, system_prompt=prompt.text, name="analyst")
+
+def build_analyst():
+    return create_agent(
+        model=get_chat_model(),
+        tools=ANALYST_TOOLS,
+        middleware=[langfuse_system_prompt(PROMPT_NAME)],
+        name="analyst",
+    )

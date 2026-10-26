@@ -1,0 +1,21 @@
+# Pengguna memilih terang, gelap, atau ikut sistem di menu ⋮ bagian Theme. Kedua tema didefinisikan
+# supaya pilihan mana pun tetap rapi. Warna grafik di src/charts.py dipilih terhadap dua latar ini.
+[theme]
+font = "sans serif"
+
+[theme.light]
+primaryColor = "#2563EB"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F3F5F9"
+textColor = "#1F2430"
+
+[theme.dark]
+primaryColor = "#4C8DF6"
+backgroundColor = "#0E1117"
+secondaryBackgroundColor = "#1A1F2B"
+textColor = "#F0F2F6"
+
+[client]
+# "viewer": sembunyikan tombol pengembang (deploy, rerun, clear cache) tetapi tetap tampilkan pilihan tema.
+# Jangan "minimal": opsi itu ikut menyembunyikan pemilih tema.
+toolbarMode = "viewer"

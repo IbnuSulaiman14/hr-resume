@@ -17,6 +17,7 @@ class ParsedResume:
     headline: str = ""  # judul di bagian atas CV (dataset menaruh jabatan di kolom nama)
     job_titles: list[str] = field(default_factory=list)
     job_dates: list[tuple[str, str]] = field(default_factory=list)  # (mulai, selesai) teks mentah
+    jobs: list[dict] = field(default_factory=list)  # {"title", "start", "end"} per entri pekerjaan, urut di CV
     degrees: list[str] = field(default_factory=list)
     skills: list[str] = field(default_factory=list)
 
@@ -123,13 +124,18 @@ def parse_resume(resume_id: str, category: str, html: str, text: str) -> ParsedR
 
         if name == "experience":
             for paragraph in section.select("div.paragraph"):
-                for title_span in paragraph.select(".jobtitle"):
-                    job = _first_line(title_span.get_text("\n"))
-                    if job and job not in parsed.job_titles:
+                titles = [_first_line(span.get_text("\n")) for span in paragraph.select(".jobtitle")]
+                titles = [t for t in titles if t]
+                for job in titles:
+                    if job not in parsed.job_titles:
                         parsed.job_titles.append(job)
                 pair = _job_dates(paragraph)
                 if pair:
                     parsed.job_dates.append(pair)
+                # Satu paragraf experience = satu entri pekerjaan; dipakai untuk timeline kandidat
+                if titles or pair:
+                    start, end = pair or ("", "")
+                    parsed.jobs.append({"title": titles[0] if titles else "", "start": start, "end": end})
         if name == "skills":
             parsed.skills.extend(s for s in extract_skills(body) if s not in parsed.skills)
 
@@ -233,43 +239,85 @@ def estimate_years_experience(job_dates: list[tuple[str, str]], today: date | No
     Bulan akhir tidak ikut dihitung (01/2010 sampai 01/2014 = 4 tahun). Tahun tanpa bulan dianggap
     awal tahun untuk tanggal mulai dan akhir tahun untuk tanggal selesai (2012 sampai 2014 = 3 tahun).
     Kembalikan None bila tidak ada rentang yang bisa dibaca."""
-    pairs = [(parse_date(start), parse_date(end)) for start, end in job_dates]
-    pairs = [(s, e) for s, e in pairs if s and e and s != "current"]
-    if not pairs:
-        return None
-
+    today = today or _default_today(job_dates)
     if today is None:
-        explicit = [d for pair in pairs for d in pair if d != "current"]
-        latest_year = max(y for y, _ in explicit)
-        latest_month = max((m or 12) for y, m in explicit if y == latest_year)
-        latest = date(latest_year + 1, latest_month, 1)
-        today = min(latest, DATA_SNAPSHOT)
-    today_months = _to_months(today.year, today.month)
-
-    intervals = []
-    for start, end in pairs:
-        start_m = _to_months(start[0], start[1] or 1)
-        if end == "current":
-            end_m = today_months
-        else:
-            end_m = _to_months(end[0], end[1]) if end[1] else _to_months(end[0] + 1, 1)
-        if start[0] < MIN_YEAR or end_m < start_m or end_m > today_months + 12:
-            continue
-        intervals.append((start_m, end_m))
-    if not intervals:
         return None
+    merged = _merge([iv for start, end in job_dates if (iv := _interval(start, end, today))])
+    if not merged:
+        return None
+    return round(sum(end_m - start_m for start_m, end_m in merged) / 12, 1)
 
-    total = 0
-    cur_start, cur_end = None, None
+
+def _default_today(job_dates: list[tuple[str, str]]) -> date | None:
+    """Tanggal kerja eksplisit terbaru ditambah satu tahun, maksimal DATA_SNAPSHOT."""
+    explicit = [d for pair in job_dates for d in map(parse_date, pair) if d and d != "current"]
+    if not explicit:
+        return None
+    latest_year = max(y for y, _ in explicit)
+    latest_month = max((m or 12) for y, m in explicit if y == latest_year)
+    return min(date(latest_year + 1, latest_month, 1), DATA_SNAPSHOT)
+
+
+def _interval(start_raw: str, end_raw: str, today: date) -> tuple[int, int] | None:
+    """Rentang satu pekerjaan dalam indeks bulan (awal, akhir), atau None bila tidak terbaca atau tidak masuk akal."""
+    start, end = parse_date(start_raw), parse_date(end_raw)
+    if not start or not end or start == "current":
+        return None
+    today_months = _to_months(today.year, today.month)
+    start_m = _to_months(start[0], start[1] or 1)
+    if end == "current":
+        end_m = today_months
+    else:
+        end_m = _to_months(end[0], end[1]) if end[1] else _to_months(end[0] + 1, 1)
+    if start[0] < MIN_YEAR or end_m < start_m or end_m > today_months + 12:
+        return None
+    return start_m, end_m
+
+
+def _merge(intervals: list[tuple[int, int]]) -> list[tuple[int, int]]:
+    """Gabungkan rentang yang bertumpuk atau bersambung supaya pekerjaan paralel tidak dihitung dua kali."""
+    merged: list[list[int]] = []
     for start_m, end_m in sorted(intervals):
-        if cur_end is None or start_m > cur_end:
-            if cur_end is not None:
-                total += cur_end - cur_start
-            cur_start, cur_end = start_m, end_m
+        if merged and start_m <= merged[-1][1]:
+            merged[-1][1] = max(merged[-1][1], end_m)
         else:
-            cur_end = max(cur_end, end_m)
-    total += cur_end - cur_start
-    return round(total / 12, 1)
+            merged.append([start_m, end_m])
+    return [(s, e) for s, e in merged]
+
+
+def _month_label(months: int) -> str:
+    return f"{months // 12}-{months % 12 + 1:02d}"
+
+
+def job_timeline(jobs: list[dict], today: date | None) -> list[dict]:
+    """Riwayat kerja urut dari yang terbaru: jabatan, mulai, selesai (teks asli CV), dan perkiraan lama bulan.
+    Entri tanpa tanggal yang terbaca tetap ditampilkan di akhir dengan `months` None."""
+    entries = []
+    for job in jobs:
+        interval = _interval(job["start"], job["end"], today) if today else None
+        entries.append({
+            "title": job["title"],
+            "start": job["start"],
+            "end": job["end"],
+            "months": (interval[1] - interval[0]) if interval else None,
+            "_sort": interval[0] if interval else -1,
+        })
+    entries.sort(key=lambda e: e["_sort"], reverse=True)
+    for entry in entries:
+        entry.pop("_sort")
+    return entries
+
+
+def employment_gaps(job_dates: list[tuple[str, str]], today: date | None, min_months: int = 6) -> list[dict]:
+    """Jeda antar pekerjaan yang lebih dari `min_months` bulan, setelah rentang bertumpuk digabung."""
+    if today is None:
+        return []
+    merged = _merge([iv for start, end in job_dates if (iv := _interval(start, end, today))])
+    gaps = []
+    for (_, prev_end), (next_start, _) in zip(merged, merged[1:]):
+        if next_start - prev_end >= min_months:
+            gaps.append({"from": _month_label(prev_end), "to": _month_label(next_start), "months": next_start - prev_end})
+    return gaps
 
 
 # ---------------------------------------------------------------------------

@@ -14,3 +14,7 @@ data/Resume.csv
 
 # Sampel G1 berisi potongan teks CV asli (bisa memuat nama/telepon); dibuat ulang dengan python -m eval.g1_sample
 eval/g1_sample.md
+
+# Dokumen internal tidak dipublikasikan; hanya README.md yang ikut repo
+*.md
+!README.md

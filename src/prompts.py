@@ -1,72 +1,80 @@
-"""Pengambilan prompt: Langfuse (label production) dengan cadangan lokal di prompts/*.md. Tahap B3.1.
+"""Prompt agent diambil dari Langfuse (label production). Tidak ada salinan lokal: prompt wajib dari Langfuse.
 
-Unggah atau perbarui prompt ke Langfuse: python -m src.prompts --upload
+Lihat prompt yang sedang dipakai: python -m src.prompts [--show NAMA]
+Mengubah prompt: edit di dashboard Langfuse (Prompts), simpan sebagai versi baru dengan label production.
 """
 import argparse
+import sys
 from dataclasses import dataclass
 from typing import Any
 
-from src.config import PROMPTS_DIR
+from langchain.agents.middleware import ModelRequest, dynamic_prompt
+
 from src.observability import get_langfuse
 
 PROMPT_NAMES = ["supervisor-system", "matcher-system", "analyst-system"]
 LABEL = "production"
+# SDK Langfuse menyimpan prompt di memori selama ini; setelah lewat, versi lama tetap dipakai
+# sambil SDK mengambil versi baru di latar belakang, jadi pesan pengguna tidak menunggu jaringan.
+CACHE_TTL_SECONDS = 300
+
+
+class PromptUnavailableError(RuntimeError):
+    """Prompt tidak bisa diambil dari Langfuse (kunci kosong, jaringan, atau prompt belum dibuat)."""
 
 
 @dataclass
 class Prompt:
     name: str
     text: str
-    source: str  # "langfuse v3" atau "lokal"
-    client: Any = None  # objek prompt Langfuse, untuk menautkan trace ke versi prompt
-
-
-def load_local_prompt(name: str) -> str:
-    return (PROMPTS_DIR / f"{name}.md").read_text(encoding="utf-8").strip()
+    version: int
+    client: Any  # objek prompt Langfuse, untuk menautkan trace ke versi prompt
 
 
 def get_prompt(name: str) -> Prompt:
-    """Ambil prompt dari Langfuse; bila kunci kosong atau Langfuse tidak terjangkau, pakai salinan lokal."""
-    local = load_local_prompt(name)
+    """Ambil prompt `name` berlabel production dari Langfuse."""
     client = get_langfuse()
     if client is None:
-        return Prompt(name, local, "lokal")
+        raise PromptUnavailableError("Kunci Langfuse belum diisi. Prompt agent wajib diambil dari Langfuse.")
     try:
-        # fallback: SDK mengembalikan teks lokal bila fetch gagal, cache 5 menit supaya tidak fetch tiap pesan
-        prompt = client.get_prompt(name, label=LABEL, fallback=local, cache_ttl_seconds=300, fetch_timeout_seconds=5)
-    except Exception:
-        return Prompt(name, local, "lokal")
-    if getattr(prompt, "is_fallback", False):
-        return Prompt(name, prompt.prompt, "lokal")
-    return Prompt(name, prompt.prompt, f"langfuse v{prompt.version}", prompt)
+        prompt = client.get_prompt(name, label=LABEL, cache_ttl_seconds=CACHE_TTL_SECONDS, fetch_timeout_seconds=10)
+    except Exception as exc:
+        raise PromptUnavailableError(f"Prompt '{name}' tidak bisa diambil dari Langfuse: {type(exc).__name__}") from exc
+    return Prompt(name=name, text=prompt.prompt, version=prompt.version, client=prompt)
 
 
-def upload_prompts() -> None:
-    """Buat versi baru di Langfuse hanya bila teks lokal berbeda dari versi production saat ini."""
-    client = get_langfuse()
-    if client is None:
-        raise RuntimeError("Kunci Langfuse belum diisi.")
+def prompt_metadata(prompt: Prompt) -> dict:
+    """Metadata config yang membuat Langfuse menautkan panggilan LLM di dalam graf ke versi prompt ini."""
+    return {"langfuse_prompt": prompt.client}
+
+
+def langfuse_system_prompt(name: str):
+    """Middleware create_agent yang mengisi system prompt dari Langfuse setiap kali model dipanggil.
+
+    Dengan cara ini graf agent boleh di-cache (Streamlit), tetapi perubahan prompt di Langfuse tetap
+    terpakai paling lambat CACHE_TTL_SECONDS kemudian tanpa restart aplikasi."""
+
+    @dynamic_prompt
+    def system_prompt_from_langfuse(request: ModelRequest) -> str:
+        return get_prompt(name).text
+
+    return system_prompt_from_langfuse
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--show", choices=PROMPT_NAMES, help="cetak isi satu prompt")
+    args = parser.parse_args()
+    sys.stdout.reconfigure(encoding="utf-8")
+    if args.show:
+        prompt = get_prompt(args.show)
+        print(f"# {prompt.name} (Langfuse v{prompt.version}, label {LABEL})\n")
+        print(prompt.text)
+        return
     for name in PROMPT_NAMES:
-        local = load_local_prompt(name)
-        try:
-            current = client.get_prompt(name, label=LABEL, cache_ttl_seconds=0).prompt
-        except Exception:
-            current = None
-        if current == local:
-            print(f"{name}: sama dengan production, dilewati")
-            continue
-        created = client.create_prompt(name=name, prompt=local, labels=[LABEL], type="text")
-        print(f"{name}: versi {created.version} dibuat dengan label {LABEL}")
-    client.flush()
+        prompt = get_prompt(name)
+        print(f"{name}: Langfuse v{prompt.version}, {len(prompt.text)} karakter")
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--upload", action="store_true", help="unggah prompts/*.md ke Langfuse")
-    args = parser.parse_args()
-    if args.upload:
-        upload_prompts()
-    else:
-        for prompt_name in PROMPT_NAMES:
-            p = get_prompt(prompt_name)
-            print(f"{prompt_name}: {p.source}, {len(p.text)} karakter")
+    main()

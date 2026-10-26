@@ -8,13 +8,11 @@ load_dotenv()
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = ROOT / "data"
-PROMPTS_DIR = ROOT / "prompts"
 RAW_CSV = DATA_DIR / "Resume.csv"
 META_CSV = DATA_DIR / "resumes_meta.csv"
 
-# Bawaan untuk openai/text-embedding-3-small. Harus sama di ingest dan query; build_index
-# memeriksa dimensi sebenarnya dari model, dan mengganti model berarti ingest ulang.
-EMBEDDING_DIM = 1536
+# Dimensi vektor tidak ditulis di sini: build_index membacanya dari model embedding (1.536 untuk
+# openai/text-embedding-3-small). Mengganti model embedding berarti ingest ulang dengan --recreate.
 DEFAULT_OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
 # Chunking: seksi lebih dari CHUNK_TOKENS dipecah, dihitung dengan tiktoken

@@ -1,4 +1,4 @@
-"""Jalankan: python -m src.ingest.build_index [--limit N] [--recreate]. Tahap B1.5 dan B1.6.
+"""Jalankan: python -m src.ingest.build_index [--limit N] [--recreate] [--payload-only].
 
 Langkah: muat CSV -> parse -> metadata -> chunk -> embed (batch, lewat OpenRouter) -> upsert ke Qdrant
 (ID uuid5 dari resume_id + chunk_idx, jadi idempoten) -> tulis data/resumes_meta.csv.
@@ -8,6 +8,7 @@ Langkah: muat CSV -> parse -> metadata -> chunk -> embed (batch, lewat OpenRoute
 `--payload-only` hanya memperbarui metadata (tahun pengalaman, pendidikan) di titik yang sudah ada.
 """
 import argparse
+import json
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
@@ -20,7 +21,9 @@ from src.ingest.chunking import Chunk, build_chunks, chunk_prefix
 from src.ingest.parse_html import (
     ParsedResume,
     education_level,
+    employment_gaps,
     estimate_years_experience,
+    job_timeline,
     parse_resume,
     reference_date,
 )
@@ -53,6 +56,9 @@ def metadata_row(parsed: ParsedResume, text: str = "") -> dict:
         "education_level": education_level(parsed.degrees),
         "job_titles": LIST_SEPARATOR.join(parsed.job_titles),
         "skills": LIST_SEPARATOR.join(parsed.skills),
+        # Disimpan sebagai JSON karena Streamlit Cloud tidak punya Resume.csv untuk mem-parse ulang HTML
+        "timeline": json.dumps(job_timeline(parsed.jobs, today), ensure_ascii=False),
+        "gaps": json.dumps(employment_gaps(parsed.job_dates, today), ensure_ascii=False),
     }
 
 

@@ -16,6 +16,11 @@ from src.tools import context
 
 EDUCATION_VALUES = ["high_school", "associate", "bachelor", "master", "doctorate", "unknown"]
 LIST_SEPARATOR = "; "
+# Rentang tahun pengalaman untuk sebaran: kiri inklusif, kanan eksklusif (2-5 berarti 2 <= tahun < 5)
+YEAR_BINS = [0, 2, 5, 10, 15, 20, float("inf")]
+YEAR_LABELS = ["0-2", "2-5", "5-10", "10-15", "15-20", "20+"]
+# Ditempel ke keluaran tool bila grafiknya tampil, supaya LLM tidak mengulang seluruh angka sebagai tabel
+CHART_NOTE = "Grafik dari data ini tampil otomatis di bawah jawaban. Jangan ulang semua angkanya sebagai tabel; cukup sebut yang terpenting."
 
 CategoryName = Literal[tuple(CATEGORIES)]
 EducationName = Literal[tuple(EDUCATION_VALUES)]
@@ -26,6 +31,8 @@ def load_meta(path: str = str(META_CSV)) -> pd.DataFrame:
     df = pd.read_csv(path, dtype={"resume_id": str})
     for column in ["headline", "job_titles", "skills", "education_level"]:
         df[column] = df[column].fillna("")
+    for column in ["timeline", "gaps"]:  # kolom JSON; tidak ada di metadata versi lama
+        df[column] = df[column].fillna("[]") if column in df else "[]"
     return df
 
 
@@ -79,7 +86,23 @@ def filter_candidates(
         }
         for r in matched.head(limit).itertuples()
     ]
-    return {"total_match": int(len(matched)), "shown": len(rows), "excluded_no_years_data": without_years, "rows": rows}
+    return {
+        "total_match": int(len(matched)),
+        "shown": len(rows),
+        "excluded_no_years_data": without_years,
+        "years_distribution": years_distribution(matched["years_experience"]),
+        "rows": rows,
+    }
+
+
+def years_distribution(years: pd.Series) -> list[dict]:
+    """Jumlah CV per rentang tahun pengalaman. Rentang kosong di ujung dibuang, di tengah tetap (celah itu informasi)."""
+    counts = pd.cut(years.dropna(), YEAR_BINS, labels=YEAR_LABELS, right=False).value_counts()
+    filled = [label for label in YEAR_LABELS if counts.get(label, 0)]
+    if not filled:
+        return []
+    span = YEAR_LABELS[YEAR_LABELS.index(filled[0]) : YEAR_LABELS.index(filled[-1]) + 1]
+    return [{"years": label, "cv_count": int(counts.get(label, 0))} for label in span]
 
 
 def skill_frequency(category: str, top_n: int = 15, df: pd.DataFrame | None = None) -> dict:
@@ -113,6 +136,76 @@ def _metadata_sources(rows: list[dict]) -> list[dict]:
     ]
 
 
+def category_chart(result: dict) -> dict:
+    """Spesifikasi grafik dari keluaran category_distribution. Angkanya sama persis dengan yang dibaca LLM."""
+    total = result["total_cv"]
+    return {
+        "title": "Jumlah CV per kategori",
+        "subtitle": f"{total:,} CV di {len(result['per_category'])} kategori",
+        "orientation": "horizontal",
+        "label_title": "Kategori",
+        "value_title": "Jumlah CV",
+        "data": [
+            {"label": category, "value": count, "detail": f"{count / total:.1%} dari semua CV"}
+            for category, count in result["per_category"].items()
+        ],
+    }
+
+
+def skill_chart(result: dict) -> dict | None:
+    if not result["top_skills"]:
+        return None
+    return {
+        "title": f"Skill terbanyak di {result['category']}",
+        "subtitle": f"Jumlah CV yang menyebut skill di seksi Skills, dari {result['total_cv']:,} CV",
+        "orientation": "horizontal",
+        "label_title": "Skill",
+        "value_title": "Jumlah CV",
+        "data": [
+            {"label": s["skill"], "value": s["cv_count"], "detail": f"{s['share']:.0%} CV di kategori ini"}
+            for s in result["top_skills"]
+        ],
+    }
+
+
+def years_chart(result: dict) -> dict | None:
+    if not result["years_distribution"]:
+        return None
+    subtitle = f"{result['total_match']:,} CV cocok dengan filter"
+    # Tanpa filter tahun, CV tanpa data pengalaman ikut cocok tetapi tidak bisa digambar: jumlah batang < total
+    not_drawn = result["total_match"] - sum(b["cv_count"] for b in result["years_distribution"])
+    if not_drawn:
+        subtitle += f"; {not_drawn:,} di antaranya tanpa data pengalaman, tidak digambar"
+    if result["excluded_no_years_data"]:
+        subtitle += f"; {result['excluded_no_years_data']:,} CV tanpa data pengalaman tidak ikut dihitung"
+    return {
+        "title": "Sebaran perkiraan tahun pengalaman",
+        "subtitle": subtitle,
+        "orientation": "vertical",
+        "label_title": "Tahun pengalaman (perkiraan)",
+        "value_title": "Jumlah CV",
+        "data": [
+            {"label": b["years"], "value": b["cv_count"], "detail": _year_range_text(b["years"])}
+            for b in result["years_distribution"]
+        ],
+    }
+
+
+def _year_range_text(label: str) -> str:
+    if label.endswith("+"):
+        return f"{label[:-1]} tahun atau lebih"
+    low, high = label.split("-")
+    return f"{low} sampai kurang dari {high} tahun"
+
+
+def _with_chart(result: dict, chart: dict | None) -> dict:
+    """Catat grafik ke context untuk UI dan beri tahu LLM bahwa grafik sudah tampil."""
+    if chart is None:
+        return result
+    context.add_chart(chart)
+    return {**result, "ui_note": CHART_NOTE}
+
+
 def _dump(data) -> str:
     return json.dumps(data, ensure_ascii=False)
 
@@ -126,7 +219,8 @@ def category_distribution_tool() -> str:
     """Hitung jumlah CV per kategori untuk seluruh dataset (24 kategori) beserta total CV.
     Pakai untuk pertanyaan "berapa CV di kategori X", "kategori terbanyak", atau sebaran kategori."""
     context.add_tool_call("category_distribution", {}, agent="analyst")
-    return _dump(category_distribution())
+    result = category_distribution()
+    return _dump(_with_chart(result, category_chart(result)))
 
 
 @tool("filter_candidates")
@@ -152,7 +246,7 @@ def filter_candidates_tool(
     context.add_tool_call("filter_candidates", args, agent="analyst")
     result = filter_candidates(category, min_years, max_years, education_level, title_contains, limit)
     context.add_sources(_metadata_sources(result["rows"]))
-    return _dump(result)
+    return _dump(_with_chart(result, years_chart(result)))
 
 
 @tool("skill_frequency")
@@ -160,7 +254,8 @@ def skill_frequency_tool(category: CategoryName, top_n: int = 15) -> str:
     """Daftar skill yang paling sering muncul di seksi Skills CV pada satu kategori, dengan jumlah CV
     yang menyebutnya dan proporsinya. Pakai untuk "skill apa yang paling umum di kategori X"."""
     context.add_tool_call("skill_frequency", {"category": category, "top_n": top_n}, agent="analyst")
-    return _dump(skill_frequency(category, top_n))
+    result = skill_frequency(category, top_n)
+    return _dump(_with_chart(result, skill_chart(result)))
 
 
 ANALYST_TOOLS = [category_distribution_tool, filter_candidates_tool, skill_frequency_tool]

@@ -1,4 +1,4 @@
-# Set evaluasi 20 pertanyaan (PRD bagian 9). Dijalankan oleh eval/run_eval.py (tahap B5).
+# Set evaluasi: 20 pertanyaan PRD bagian 9 + 2 pertanyaan tool Tahap 3. Dijalankan oleh eval/run_eval.py.
 # route: agent yang seharusnya dipakai (matcher | analyst | both | none).
 # tools: tool yang seharusnya dipanggil (urutan tidak dinilai).
 # turns: pertanyaan sebelumnya dalam percakapan yang sama (untuk uji riwayat).
@@ -131,3 +131,14 @@
   question: "Siapa presiden pertama Indonesia?"
   route: none
   expect: {refuse_or_state_limit: "di luar topik CV dan rekrutmen", any_of: ["di luar", "hanya", "tidak dapat menjawab", "tidak bisa menjawab"]}
+
+- id: gap-01
+  group: tahap3
+  question: "Untuk lowongan Executive Chef yang butuh menu costing, inventory control, ServSafe, dan staff training, skill apa yang belum terlihat di CV kandidat 21611637?"
+  route: matcher
+  tools: [skill_gap]
+- id: timeline-01
+  group: tahap3
+  question: "Tampilkan riwayat kerja kandidat 21611637 secara kronologis."
+  route: matcher
+  tools: [candidate_timeline]

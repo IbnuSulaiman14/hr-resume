@@ -4,7 +4,9 @@ import pytest
 
 from src.ingest.parse_html import (
     education_level,
+    employment_gaps,
     estimate_years_experience,
+    job_timeline,
     extract_skills,
     normalize_section,
     parse_date,
@@ -77,6 +79,36 @@ def test_parse_resume_sections_and_metadata():
     assert parsed.job_dates == [("01/2015", "Current"), ("Jun 2010", "Dec 2014")]
     assert parsed.degrees == ["Associate of Applied Science"]
     assert {"menu development", "servsafe certified", "inventory control", "cooking"} <= set(parsed.skills)
+
+
+def test_parse_resume_pairs_title_with_dates_per_job():
+    parsed = parse_resume("123", "CHEF", SAMPLE_HTML, "teks")
+
+    assert parsed.jobs == [
+        {"title": "Executive Chef", "start": "01/2015", "end": "Current"},
+        {"title": "Line Cook", "start": "Jun 2010", "end": "Dec 2014"},
+    ]
+
+
+def test_job_timeline_newest_first_with_months():
+    jobs = [
+        {"title": "Line Cook", "start": "06/2010", "end": "12/2014"},
+        {"title": "Executive Chef", "start": "01/2015", "end": "Current"},
+        {"title": "Volunteer", "start": "", "end": ""},
+    ]
+    timeline = job_timeline(jobs, today=date(2017, 1, 1))
+
+    assert [e["title"] for e in timeline] == ["Executive Chef", "Line Cook", "Volunteer"]
+    assert [e["months"] for e in timeline] == [24, 54, None]
+
+
+def test_employment_gaps_after_merging_overlaps():
+    dates = [("01/2010", "06/2012"), ("01/2011", "12/2012"), ("01/2014", "01/2015"), ("03/2015", "Current")]
+
+    gaps = employment_gaps(dates, today=date(2016, 1, 1))
+
+    # 12/2012 sampai 01/2014 = 13 bulan; jeda 2 bulan di 2015 di bawah ambang 6 bulan
+    assert gaps == [{"from": "2012-12", "to": "2014-01", "months": 13}]
 
 
 def test_parse_resume_falls_back_to_plain_text():
