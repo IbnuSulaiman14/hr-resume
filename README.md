@@ -57,11 +57,9 @@ Stack: LangChain dan LangGraph (`create_agent` dengan middleware `dynamic_prompt
 - **Sumber dicatat dari keluaran tool**, bukan dari teks LLM, sehingga panel Sumber RAG hanya berisi yang benar-benar diambil.
 - **"Current" pada tanggal kerja.** CV ditulis pada tahun yang berbeda-beda, jadi "Current" diukur sampai tanggal terbaru yang disebut di CV ditambah 12 bulan, bukan hari ini. Aturan ini divalidasi terhadap 372 CV yang menulis "N+ years".
 - **Prompt hanya di Langfuse.** Tidak ada salinan prompt di repo. Middleware `dynamic_prompt` mengambil prompt (label production, cache 5 menit) setiap kali model dipanggil, jadi perubahan di Langfuse terpakai tanpa deploy ulang. Bila Langfuse tidak terjangkau, aplikasi menampilkan pesan yang jelas.
-- **Reranker dua tahap.** Qdrant mengambil kandidat lebih banyak, lalu reranker (cross-encoder) mengurutkan ulang. Diukur dengan LLM penilai buta pada 10 kueri: relevansi top-5 naik sedikit (1,54 menjadi 1,60 dari 2) dengan tambahan sekitar 2,6 detik per pencarian ([eval/rerank_report.md](eval/rerank_report.md)).
+- **Reranker dua tahap.** Qdrant mengambil kandidat lebih banyak, lalu reranker (cross-encoder) mengurutkan ulang. Diukur dengan LLM penilai buta pada 10 kueri: relevansi top-5 naik sedikit (1,54 menjadi 1,60 dari 2) dengan tambahan sekitar 2,6 detik per pencarian. Perbandingan dapat diulang dengan `python -m eval.rerank_compare`.
 - **Skill gap tanpa LLM.** Pencocokan teks literal terhadap daftar skill dan isi CV, sehingga hasilnya bisa diulang dan selalu disertai bukti.
 - **Latensi.** Reasoning model dimatikan dan prompt mengatur hemat langkah (maksimal 2 pencarian, `get_resume` hanya untuk detail). Satu pencarian yang awalnya 54 detik turun menjadi sekitar 13 detik; median 22 pertanyaan evaluasi 11,1 detik dengan reranker aktif.
-
-Penjelasan kode per fungsi (urut dari Streamlit ke fungsi-fungsi) ada di [docs/PENJELASAN.md](docs/PENJELASAN.md).
 
 ## Menjalankan
 ```
@@ -82,7 +80,7 @@ Perintah lain: `pytest` (offline, tanpa kunci), `python -m src.prompts --show ma
 Untuk Streamlit Community Cloud, isi App settings > Secrets sesuai `.streamlit/secrets.toml.example`.
 
 ## Evaluasi
-22 pertanyaan di `eval/questions.yaml`: 20 sesuai PRD (pencarian 6, pencocokan lowongan 4, statistik 4, lanjutan 3, penolakan 3) dan 2 untuk skill gap dan timeline. Laporan lengkap di [eval/report.md](eval/report.md).
+22 pertanyaan di `eval/questions.yaml`: 20 pertanyaan inti (pencarian 6, pencocokan lowongan 4, statistik 4, lanjutan 3, penolakan 3) dan 2 untuk skill gap dan timeline. Laporan lengkap dibuat oleh `python -m eval.run_eval` ke `eval/report.md`.
 
 | Metrik | Hasil | Target |
 |---|---|---|
