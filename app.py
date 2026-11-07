@@ -20,22 +20,38 @@ from src.tools.analyst_tools import load_meta
 
 st.set_page_config(page_title="Asisten Rekruter", page_icon="🧑‍💼", layout="wide")
 
-EXAMPLE_QUESTIONS = [
-    "Cari kandidat chef yang punya pengalaman katering dan pengembangan menu.",
-    "Lowongan IT Support: menangani tiket helpdesk, instalasi perangkat, dan troubleshooting jaringan. Siapa yang cocok?",
-    "Berapa CV di kategori Finance dengan perkiraan pengalaman di atas 5 tahun?",
-    "Skill apa yang paling sering muncul di kategori Information-Technology?",
-    "Bandingkan dua kandidat teratas dari jawaban sebelumnya.",
-    "Untuk lowongan Executive Chef yang butuh menu costing, inventory control, dan ServSafe, skill apa yang belum terlihat di CV kandidat pertama?",
-    "Tampilkan riwayat kerja kandidat pertama secara kronologis.",
-]
-
-# Kartu di layar awal: hanya pertanyaan yang bisa dijawab tanpa riwayat sebelumnya
+# Tiap pertanyaan berdiri sendiri (tanpa bergantung riwayat) dan semuanya bersama memicu kesembilan tool:
+# search_resumes, match_job, category_distribution, filter_candidates, skill_frequency,
+# compare_candidates, get_resume, skill_gap, dan candidate_timeline.
 WELCOME_CARDS = [
-    (":material/search:", "Cari kandidat", EXAMPLE_QUESTIONS[0]),
-    (":material/work:", "Cocokkan dengan lowongan", EXAMPLE_QUESTIONS[1]),
-    (":material/bar_chart:", "Hitung statistik", EXAMPLE_QUESTIONS[2]),
-    (":material/psychology:", "Skill terbanyak", EXAMPLE_QUESTIONS[3]),
+    (
+        ":material/search:", "Cari kandidat",
+        "Cari kandidat chef yang punya pengalaman katering dan pengembangan menu.",
+    ),
+    (
+        ":material/work:", "Cocokkan dengan lowongan",
+        "Lowongan IT Support: menangani tiket helpdesk, instalasi perangkat, dan troubleshooting jaringan. "
+        "Siapa yang cocok?",
+    ),
+    (
+        ":material/bar_chart:", "Hitung statistik",
+        "Kategori apa yang punya CV terbanyak, dan berapa CV di kategori Finance dengan perkiraan pengalaman "
+        "di atas 5 tahun?",
+    ),
+    (
+        ":material/psychology:", "Skill terbanyak",
+        "Skill apa yang paling sering muncul di kategori Information-Technology?",
+    ),
+    (
+        ":material/compare_arrows:", "Bandingkan kandidat",
+        "Cari tiga kandidat Accountant dengan pengalaman audit, lalu bandingkan ketiganya.",
+    ),
+    (
+        ":material/person_search:", "Telusuri satu kandidat",
+        "Cari satu kandidat chef terbaik untuk pengembangan menu. Khusus untuk kandidat itu, tampilkan isi CV "
+        "lengkapnya, cek apakah menu costing, inventory control, dan ServSafe terlihat di CV-nya, lalu susun "
+        "riwayat kerjanya secara kronologis.",
+    ),
 ]
 
 ASSISTANT_AVATAR = ":material/support_agent:"
@@ -57,7 +73,6 @@ STYLE = """
 
 @st.cache_resource(show_spinner="Menyiapkan agent...")
 def load_agent():
-    # Graf dibuat sekali per proses; system prompt tetap diambil dari Langfuse setiap kali model dipanggil
     return build_supervisor()
 
 
@@ -76,13 +91,11 @@ def init_state() -> None:
 
 
 def reset_chat() -> None:
-    # Shortlist sengaja tidak ikut direset supaya kandidat yang sudah dipilih tidak hilang
     for key in ["messages", "usage_total", "session_id", "pending_question"]:
         st.session_state.pop(key, None)
 
 
 def set_pending(question: str) -> None:
-    # Dipakai sebagai on_click: callback jalan sebelum skrip, jadi layar awal sudah tahu ada pertanyaan menunggu
     st.session_state.pending_question = question
 
 
@@ -225,10 +238,6 @@ def sidebar() -> None:
         )
         st.button("Reset percakapan", on_click=reset_chat, icon=":material/restart_alt:", width="stretch")
 
-        with st.expander("Contoh pertanyaan"):
-            for i, question in enumerate(EXAMPLE_QUESTIONS):
-                st.button(question, key=f"example_{i}", on_click=set_pending, args=(question,), width="stretch")
-
         with st.expander("Batasan dan etika"):
             st.caption(
                 "Alat bantu penyaringan awal. Aplikasi tidak memutuskan siapa yang diterima dan tidak menyaring "
@@ -271,7 +280,6 @@ def answer_question(question: str) -> None:
                 print(traceback.format_exc())
                 error = "Prompt agent tidak bisa diambil dari Langfuse. Periksa kunci dan koneksi Langfuse, lalu coba lagi."
             except Exception:
-                # Detail galat hanya ke log server; pengguna mendapat pesan ramah
                 print(traceback.format_exc())
                 error = "Maaf, terjadi galat saat memproses pertanyaan. Coba lagi sebentar lagi atau ubah pertanyaannya."
             if error:

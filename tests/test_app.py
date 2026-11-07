@@ -70,7 +70,10 @@ def test_menu_hides_print_and_record_but_keeps_theme_switcher(fake_agent):
 def test_welcome_cards_shown_until_first_question(fake_agent):
     at = AppTest.from_file(APP, default_timeout=30).run()
     assert any(s.value == "Tanya tentang kandidat" for s in at.title)
-    assert len([b for b in at.button if b.key and b.key.startswith("welcome_")]) == 4
+    assert len([b for b in at.button if b.key and b.key.startswith("welcome_")]) == 6
+    # Sidebar tidak lagi punya daftar contoh pertanyaan; contoh hanya ada di kartu sambutan
+    assert not any(e.label == "Contoh pertanyaan" for e in at.sidebar.expander)
+    assert not any(b.key and b.key.startswith("example_") for b in at.button)
 
     at.chat_input[0].set_value("Cari chef").run()
     assert not any(s.value == "Tanya tentang kandidat" for s in at.title)
