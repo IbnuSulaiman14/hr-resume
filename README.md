@@ -3,8 +3,8 @@
 Chatbot RAG multi-agent untuk mencari, mencocokkan, dan menganalisis kandidat dari 2.484 CV (Resume Dataset, Kaggle, 24 kategori). Setiap jawaban menyertakan ID CV dan sumbernya. Capstone Module 3 Purwadhika (JCAIEAH-005).
 
 ## Aplikasi
-- Demo: _(isi link Streamlit Community Cloud)_
-- Video penjelasan: _(isi link)_
+- Demo: https://hr-resume-ibnu.streamlit.app/
+- Video penjelasan: https://youtu.be/q_PZ23uMvDs
 
 ## Masalah dan solusi
 Rekruter menerima banyak CV dengan format berbeda-beda. Pencarian kata kunci melewatkan CV yang memakai istilah lain, membaca satu per satu lambat, dan LLM tanpa data bisa mengarang. Asisten Rekruter mencari kandidat berdasarkan makna, mencocokkan CV dengan deskripsi lowongan, membandingkan kandidat, dan menghitung statistik pool kandidat. Setiap fakta berasal dari keluaran tool dan dapat ditelusuri ke CV sumbernya.
