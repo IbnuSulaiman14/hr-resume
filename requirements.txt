@@ -17,4 +17,7 @@ pyyaml==6.0.3
 streamlit==1.66.1
 altair==6.3.0  # grafik di src/charts.py; ikut terpasang oleh streamlit
 
+fastapi==0.163.1  # API di server.py
+uvicorn==0.54.0  # server ASGI untuk server.py; ikut terpasang oleh streamlit
+
 pytest==9.1.1
