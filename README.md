@@ -22,6 +22,7 @@ Rekruter menerima banyak CV dengan format berbeda-beda. Pencarian kata kunci mel
 - Shortlist kandidat dari panel sumber, dapat diunduh sebagai CSV.
 - Di setiap jawaban: tool call, sumber RAG (ID CV, kategori, seksi, skor vektor, skor rerank, cuplikan), riwayat yang dikirim, token, waktu, dan perkiraan biaya.
 - Prompt ketiga agent wajib dari Langfuse (tanpa salinan lokal), diambil setiap kali model dipanggil; setiap pertanyaan menghasilkan satu trace yang tertaut ke versi prompt.
+- API FastAPI (`server.py`) dengan endpoint biasa dan streaming (Server-Sent Events: event tool dari setiap agent dan potongan jawaban), dikemas dengan Docker dan siap deploy ke Google Cloud Run.
 
 ## Arsitektur
 
@@ -64,9 +65,9 @@ flowchart TD
     ANA -.- LF
 ```
 
-**Chat** (tiap pertanyaan): Streamlit -> Supervisor memilih spesialis -> Matcher (RAG di Qdrant + reranker) dan/atau Analyst (Pandas) menjalankan loop ReAct -> tool mencatat sumber ke penampung per permintaan -> UI menampilkan jawaban beserta buktinya.
+**Chat** (tiap pertanyaan): Streamlit -> Supervisor memilih spesialis -> Matcher (RAG di Qdrant + reranker) dan/atau Analyst (Pandas) menjalankan loop ReAct -> tool mencatat sumber ke penampung per permintaan -> UI menampilkan jawaban beserta buktinya. API (`server.py`) memakai alur yang sama lewat `src/chat.py`.
 
-Stack: LangChain dan LangGraph (`create_agent` dengan middleware `dynamic_prompt`), Qdrant Cloud, OpenRouter (chat `deepseek/deepseek-v4-flash-0731`, embedding `openai/text-embedding-3-small`, reranker `qwen/qwen3-reranker-8b`), Langfuse, Streamlit, Pandas.
+Stack: LangChain dan LangGraph (`create_agent` dengan middleware `dynamic_prompt`), Qdrant Cloud, OpenRouter (chat `deepseek/deepseek-v4-flash-0731`, embedding `openai/text-embedding-3-small`, reranker `qwen/qwen3-reranker-8b`), Langfuse, Streamlit, Pandas, FastAPI, Docker.
 
 ## Keputusan desain
 - **Supervisor multi-agent as tools.** Sub-agent dibungkus sebagai tool. Supervisor menulis tugas yang mandiri (kriteria dan ID CV) karena sub-agent tidak melihat riwayat.
@@ -98,6 +99,69 @@ Prompt `supervisor-system`, `matcher-system`, dan `analyst-system` harus ada di 
 Perintah lain: `pytest` (offline, tanpa kunci), `python -m src.prompts --show matcher-system`, `python -m src.cli "pertanyaan" "lanjutan"`, `python -m eval.run_eval`, `python -m eval.injection_test`, `python -m eval.rerank_compare`.
 
 Untuk Streamlit Community Cloud, isi App settings > Secrets sesuai `.streamlit/secrets.toml.example`.
+
+## API (FastAPI) dan Docker
+`server.py` membuka agent yang sama sebagai API. Dokumentasi interaktif (Swagger) ada di `/docs`.
+
+| Endpoint | Isi |
+|---|---|
+| `GET /` | cek server hidup |
+| `POST /chat` | jawaban utuh setelah agent selesai |
+| `POST /chat/stream` | Server-Sent Events selagi agent berjalan |
+
+Body request kedua endpoint chat:
+```json
+{
+  "query": "Cari 3 kandidat HR manager yang berpengalaman rekrutmen",
+  "history": [{"role": "user", "content": "..."}, {"role": "assistant", "content": "..."}],
+  "session_id": "opsional, untuk mengelompokkan trace di Langfuse"
+}
+```
+`history` juga boleh berupa teks dengan baris `user: ...` dan `assistant: ...`.
+
+Balasan `/chat`: `response`, `input_tokens`, `output_tokens`, `tool_messages` (jawaban Matcher/Analyst untuk supervisor), `tool_calls` (semua tool, termasuk yang dipanggil di dalam sub-agent, beserta agent pemanggilnya), `sources`, `charts`, `llm_calls`, `cost_usd`, `seconds`, dan `trace_id`.
+
+Event `/chat/stream`, berurutan selagi agent bekerja:
+
+| Event | Data |
+|---|---|
+| `tool_start` | `agent` (supervisor, matcher, atau analyst), `tool`, `input` |
+| `tool_end` | `agent`, `tool`, `output` (dipotong 500 karakter) |
+| `token` | `text`, potongan teks dari supervisor |
+| `done` | isi yang sama dengan balasan `/chat` |
+| `error` | `detail`; detail teknis hanya tercatat di log server |
+
+Supervisor kadang menulis kalimat pengantar sebelum memanggil tool, jadi token yang datang sebelum `tool_start` dari supervisor bukan bagian jawaban. Jawaban final yang utuh selalu ada di `response` pada event `done`.
+
+Menjalankan dan mencoba:
+```
+uvicorn server:app --reload --port 8080     # lalu buka http://localhost:8080/docs
+curl -N -X POST http://localhost:8080/chat/stream -H "Content-Type: application/json" -d '{"query": "Berapa jumlah CV di kategori HR?"}'
+```
+Perintah `curl` di atas untuk bash (Git Bash, Linux, macOS, Cloud Shell). Bila `API_KEY` diisi, setiap request ke `/chat` dan `/chat/stream` wajib membawa header `X-API-Key` bernilai sama (di `/docs` lewat tombol Authorize). Isi `API_KEY` sebelum API dibuka ke internet, supaya kredit OpenRouter tidak dipakai orang lain.
+
+Docker. Image hanya berisi `src/`, `server.py`, dan `data/resumes_meta.csv`; kunci diberikan saat container dijalankan, tidak ikut di dalam image.
+```
+docker build -t hr-resume-api .
+docker run --rm -p 8080:8080 --env-file .env hr-resume-api
+```
+
+### Deploy ke Google Cloud Run
+Container membaca port dari variabel `PORT` yang diisi Cloud Run, berjalan sebagai user biasa, dan mengirim trace Langfuse sebelum setiap respons selesai, karena Cloud Run memperlambat CPU setelah respons terkirim. Dari folder repo (bash):
+```bash
+gcloud auth login
+gcloud config set project PROJECT_ID
+gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com
+
+gcloud run deploy hr-resume-api \
+  --source . \
+  --region asia-southeast2 \
+  --allow-unauthenticated \
+  --memory 1Gi \
+  --timeout 300 \
+  --set-env-vars "$(tr -d '\r' < .env | grep -v -e '^#' -e '^$' | paste -sd, -)"
+```
+`--source .` membangun image dari `Dockerfile` di Cloud Build dan menyimpannya di Artifact Registry. `.gcloudignore` memastikan `.env` tidak ikut terunggah; isinya masuk sebagai environment variable lewat `--set-env-vars`. Untuk produksi, simpan kunci di Secret Manager (`--set-secrets`) agar tidak terlihat di konsol Cloud Run. Setelah selesai, buka `URL_LAYANAN/docs`. Bila build gagal karena izin, berikan peran ke service account build seperti langkah IAM di [panduan referensi](https://github.com/hermansh-id/agent_resume/blob/main/deployment_gcp.md).
 
 ## Evaluasi
 22 pertanyaan di `eval/questions.yaml`: 20 pertanyaan inti (pencarian 6, pencocokan lowongan 4, statistik 4, lanjutan 3, penolakan 3) dan 2 untuk skill gap dan timeline. Laporan lengkap dibuat oleh `python -m eval.run_eval` ke `eval/report.md`.
