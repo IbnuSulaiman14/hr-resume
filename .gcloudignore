@@ -1,0 +1,10 @@
+# File yang tidak diunggah ke Cloud Build (gcloud builds submit / gcloud run deploy --source).
+# Semua aturan .gitignore ikut berlaku, termasuk .env dan data/Resume.csv.
+.gcloudignore
+.git
+.gitignore
+#!include:.gitignore
+.venv/
+.devcontainer/
+eval/
+tests/

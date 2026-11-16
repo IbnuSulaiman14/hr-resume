@@ -1,0 +1,16 @@
+# Rahasia: kunci diberikan saat container dijalankan (--env-file atau env Cloud Run), tidak di dalam image
+.env
+.env.*
+.streamlit/secrets.toml
+
+# Tidak dibutuhkan API
+.git/
+.venv/
+.devcontainer/
+__pycache__/
+*.pyc
+.pytest_cache/
+data/Resume.csv
+eval/
+tests/
+*.md
